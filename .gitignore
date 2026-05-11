@@ -8,6 +8,9 @@ env/
 venv/
 ENV/
 
+# Scratch files
+scratch/
+
 # OS
 .DS_Store
 Thumbs.db

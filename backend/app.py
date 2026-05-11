@@ -61,7 +61,9 @@ def get_forecast():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """Handles CSV data uploads."""
+    print("Received upload request...")
     if 'file' not in request.files:
+        print("Error: No file part in request")
         return jsonify({"error": "No file part"}), 400
         
     file = request.files['file']

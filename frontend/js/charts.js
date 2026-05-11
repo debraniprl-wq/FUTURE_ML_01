@@ -155,8 +155,10 @@ function initCategoryChart(data = [45, 25, 20, 10]) {
     });
 }
 
-// Export initialization functions
+// Export initialization functions and instances
 window.ForecastCharts = {
     initRevenueChart,
-    initCategoryChart
+    initCategoryChart,
+    getRevenueInstance: () => revenueChartInstance,
+    getCategoryInstance: () => categoryChartInstance
 };

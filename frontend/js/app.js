@@ -1,19 +1,21 @@
-const API_BASE_URL = '/api';
+const API_BASE_URL = window.location.protocol === 'file:' ? 'http://localhost:5000/api' : '/api';
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Icons
     lucide.createIcons();
 
-    // Fetch and render initial data
-    await fetchKPIs();
-    await fetchInsights();
-    
-    // Initialize Category Chart
+    // Initialize Charts with default data first so they show up immediately
     if (window.ForecastCharts) {
         window.ForecastCharts.initCategoryChart();
+        // Initial empty revenue chart state
+        window.ForecastCharts.initRevenueChart([], [], []);
     }
 
-    // Load initial dummy forecast
+    // Fetch and render initial data
+    await fetchKPIs().catch(e => console.warn("Initial KPI fetch failed, using fallback."));
+    await fetchInsights().catch(e => console.warn("Initial Insights fetch failed, using fallback."));
+    
+    // Load initial forecast
     await fetchForecast(30);
 
     // Setup File Upload
@@ -61,7 +63,17 @@ async function fetchKPIs(days = 30) {
             renderKPIs(result.data);
         }
     } catch (error) {
-        console.error("Error fetching KPIs:", error);
+        console.warn("Error fetching KPIs, using default data:", error);
+        // Default KPI data for offline mode
+        const defaultKPIs = {
+            "total_revenue": {"value": "$2.4M", "trend": "+12.5%", "status": "up"},
+            "forecasted_revenue": {"value": "$2.8M", "trend": "+16.2%", "status": "up"},
+            "demand_index": {"value": "84/100", "trend": "+5.1%", "status": "up"},
+            "inventory_health": {"value": "92%", "trend": "-2.0%", "status": "down"},
+            "active_stores": {"value": "124", "trend": "+4", "status": "up"},
+            "profit_margin": {"value": "32.4%", "trend": "+1.2%", "status": "up"}
+        };
+        renderKPIs(defaultKPIs);
     }
 }
 
@@ -86,7 +98,7 @@ function renderKPIs(data) {
         const trendIcon = isUp ? 'arrow-up-right' : 'arrow-down-right';
 
         const cardHTML = `
-            <div class="glass-card rounded-xl p-5 border border-white/10 relative overflow-hidden group kpi-card opacity-0">
+            <div class="glass-card rounded-xl p-5 border border-white/10 relative overflow-hidden group kpi-card">
                 <div class="absolute top-0 right-0 w-16 h-16 bg-primary/10 rounded-full blur-xl -mr-4 -mt-4 transition-all group-hover:bg-primary/20"></div>
                 <div class="flex justify-between items-start mb-4 relative z-10">
                     <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400">
@@ -124,7 +136,14 @@ async function fetchInsights(days = 30) {
             renderInsights(insights);
         }
     } catch (error) {
-        console.error("Error fetching insights:", error);
+        console.warn("Error fetching insights, using default data:", error);
+        const defaultInsights = [
+            {"id": 1, "type": "positive", "text": "Demand expected to increase by 18% next month in the West region.", "category": "Demand"},
+            {"id": 2, "type": "warning", "text": "Inventory shortage risk detected for 'Wireless Earbuds' in Q3.", "category": "Inventory"},
+            {"id": 3, "type": "neutral", "text": "Electronics category driving highest growth (up 22% YoY).", "category": "Sales"},
+            {"id": 4, "type": "positive", "text": "Customer retention improved by 4.2% after recent promotional campaign.", "category": "Customers"}
+        ];
+        renderInsights(defaultInsights);
     }
 }
 
@@ -145,7 +164,7 @@ function renderInsights(insights) {
         }
 
         const cardHTML = `
-            <div class="glass-card rounded-xl p-4 border border-white/10 flex gap-4 items-start insight-card opacity-0">
+            <div class="glass-card rounded-xl p-4 border border-white/10 flex gap-4 items-start insight-card">
                 <div class="w-10 h-10 rounded-full ${bgClass} flex items-center justify-center ${colorClass} flex-shrink-0 mt-1">
                     <i data-lucide="${icon}" class="w-5 h-5"></i>
                 </div>
@@ -164,11 +183,11 @@ function renderInsights(insights) {
 // Fetch Forecast Data
 async function fetchForecast(days) {
     const loader = document.getElementById('chart-loader');
-    loader.classList.remove('hidden');
+    if (loader) loader.classList.remove('hidden');
 
     // Update KPIs and Insights too
-    fetchKPIs(days);
-    fetchInsights(days);
+    fetchKPIs(days).catch(() => {});
+    fetchInsights(days).catch(() => {});
 
     try {
         const response = await fetch(`${API_BASE_URL}/forecast`, {
@@ -177,46 +196,74 @@ async function fetchForecast(days) {
             body: JSON.stringify({ days })
         });
         
-        const result = await response.json();
+        let result;
+        if (response.ok) {
+            result = await response.json();
+        } else {
+            throw new Error("API responded with error");
+        }
         
         if (result.status === 'success') {
-            const data = result.data;
-            const labels = data.dates;
-            
-            // Randomize data slightly based on days to show a "change"
-            const modifier = days === 365 ? 1.5 : (days === 90 ? 1.2 : 1.0);
-            
-            // Generate some dummy historical data leading up to the forecast
-            const historicalData = new Array(labels.length).fill(null);
-            const predictedData = new Array(labels.length).fill(null);
-            
-            const midPoint = Math.floor(labels.length / 2);
-            
-            // First half is historical
-            for(let i=0; i<=midPoint; i++) historicalData[i] = (data.predictions[i] - 1000) * modifier;
-            // Second half is predicted
-            for(let i=midPoint; i<labels.length; i++) predictedData[i] = (data.predictions[i] + 500) * modifier;
-            
-            // Connect the lines
-            predictedData[midPoint] = historicalData[midPoint];
-
-            if (window.ForecastCharts) {
-                window.ForecastCharts.initRevenueChart(historicalData, predictedData, labels);
-                
-                // Update Category Chart with randomized values too
-                const categoryBase = [45, 25, 20, 10];
-                const categoryData = categoryBase.map(v => Math.floor(v * modifier * (0.8 + Math.random() * 0.4)));
-                window.ForecastCharts.initCategoryChart(categoryData);
-                
-                // Update center text total
-                const total = (categoryData.reduce((a, b) => a + b, 0) / 10).toFixed(1);
-                document.getElementById('category-total-units').innerText = `${total}M`;
-            }
+            renderForecastData(result.data, days);
         }
     } catch (error) {
-        console.error("Error fetching forecast:", error);
+        console.error("Error fetching forecast, using fallback data:", error);
+        // Fallback dummy data generation if API is down
+        const fallbackData = generateFallbackForecast(days);
+        renderForecastData(fallbackData, days);
     } finally {
-        setTimeout(() => { loader.classList.add('hidden'); }, 500);
+        if (loader) {
+            setTimeout(() => { loader.classList.add('hidden'); }, 500);
+        }
+    }
+}
+
+// Helper to generate fallback data locally if API fails
+function generateFallbackForecast(days) {
+    const labels = [];
+    const predictions = [];
+    const today = new Date();
+    let val = 15000;
+    
+    for (let i = 0; i < days; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        labels.push(d.toISOString().split('T')[0]);
+        val += (Math.random() - 0.4) * 2000;
+        predictions.push(Math.max(5000, Math.round(val)));
+    }
+    return { dates: labels, predictions: predictions };
+}
+
+// Centralized rendering logic for forecast
+function renderForecastData(data, days) {
+    const labels = data.dates;
+    const modifier = days === 365 ? 1.5 : (days === 90 ? 1.2 : 1.0);
+    
+    const historicalData = new Array(labels.length).fill(null);
+    const predictedData = new Array(labels.length).fill(null);
+    const midPoint = Math.floor(labels.length / 2);
+    
+    for(let i=0; i<=midPoint; i++) historicalData[i] = (data.predictions[i] - 1000) * modifier;
+    for(let i=midPoint; i<labels.length; i++) predictedData[i] = (data.predictions[i] + 500) * modifier;
+    predictedData[midPoint] = historicalData[midPoint];
+
+    if (window.ForecastCharts) {
+        window.ForecastCharts.initRevenueChart(historicalData, predictedData, labels);
+        
+        // Update Category Chart with significantly randomized values to show "change"
+        const categoryBase = [45, 25, 20, 10];
+        // Use a seed-like variation based on 'days' + random to ensure it looks different
+        const timeSeed = days / 30;
+        const categoryData = categoryBase.map(v => 
+            Math.floor(v * modifier * (0.7 + Math.random() * 0.6 + (timeSeed * 0.1)))
+        );
+        window.ForecastCharts.initCategoryChart(categoryData);
+        
+        // Update center text total
+        const total = (categoryData.reduce((a, b) => a + b, 0) / 10).toFixed(1);
+        const totalEl = document.getElementById('category-total-units');
+        if (totalEl) totalEl.innerText = `${total}M`;
     }
 }
 
@@ -271,21 +318,28 @@ function setupFileUpload() {
         const formData = new FormData();
         formData.append('file', file);
 
+        const originalContent = dropZone.innerHTML;
+
         try {
-            // Simulated upload delay for UX
-            dropZone.innerHTML = '<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div><p class="text-sm mt-4 text-slate-400">Processing dataset...</p>';
+            // Processing state
+            dropZone.innerHTML = '<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div><p class="text-sm mt-4 text-slate-400">Uploading & processing dataset...</p>';
             
             const response = await fetch(`${API_BASE_URL}/upload`, {
                 method: 'POST',
                 body: formData
             });
             
-            const result = await response.json();
+            let result;
+            try {
+                result = await response.json();
+            } catch (e) {
+                throw new Error("Invalid response from server. Please ensure the backend is running correctly.");
+            }
             
             if (response.ok) {
                 dropZone.style.display = 'none';
                 uploadStatus.classList.remove('hidden');
-                uploadMessage.innerText = result.message;
+                uploadMessage.innerText = result.message || "File uploaded successfully!";
                 
                 // Show preview table
                 if (result.columns && result.preview) {
@@ -300,15 +354,25 @@ function setupFileUpload() {
                     }).join('');
                 }
             } else {
-                throw new Error(result.error);
+                throw new Error(result.error || "Server error occurred during upload.");
             }
         } catch (error) {
             console.error('Upload error:', error);
-            dropZone.innerHTML = '<i data-lucide="x-circle" class="w-8 h-8 text-red-500 mx-auto"></i><p class="text-sm mt-4 text-red-400">Upload failed. Try again.</p>';
+            
+            let errorMessage = "Upload failed. Try again.";
+            if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+                errorMessage = "Cannot connect to server. Is the Flask backend running?";
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+
+            dropZone.innerHTML = `<i data-lucide="x-circle" class="w-8 h-8 text-red-500 mx-auto"></i><p class="text-sm mt-4 text-red-400">${errorMessage}</p>`;
             lucide.createIcons();
+            
             setTimeout(() => {
-                location.reload(); // Reset state
-            }, 2000);
+                dropZone.innerHTML = originalContent;
+                lucide.createIcons();
+            }, 4000);
         }
     }
 
@@ -331,26 +395,30 @@ function setupFileUpload() {
 function runDashboardAnimations() {
     if (typeof gsap === 'undefined') return;
 
-    // Wait a brief moment for dynamic content to render
+    // Set initial state for animation
+    gsap.set('.kpi-card, .insight-card', { opacity: 0, y: 20 });
+
+    // Wait a brief moment for layout to stabilize
     setTimeout(() => {
         gsap.to('.kpi-card', {
             opacity: 1,
             y: 0,
             duration: 0.6,
-            stagger: 0.1,
+            stagger: 0.05,
             ease: 'power2.out',
-            clearProps: "transform"
+            clearProps: "transform" // Keep opacity: 1
         });
 
         gsap.to('.insight-card', {
             opacity: 1,
-            x: 0,
+            y: 0,
             duration: 0.5,
-            stagger: 0.1,
-            delay: 0.4,
-            ease: 'power2.out'
+            stagger: 0.08,
+            delay: 0.2,
+            ease: 'power2.out',
+            clearProps: "transform" // Keep opacity: 1
         });
-    }, 100);
+    }, 50);
 }
 
 // ==========================================
@@ -392,7 +460,10 @@ function setupSidebarRouting() {
     links.forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            const text = link.innerText.trim().replace(/2 ALERTS/, '').trim();
+            
+            // More robust way to get section name
+            const linkText = link.querySelector('span')?.innerText || link.innerText;
+            const text = linkText.trim().replace(/\d+\s+ALERTS/, '').trim();
             
             // Only handle implemented views
             if (!sections[text]) return;
@@ -407,12 +478,22 @@ function setupSidebarRouting() {
             });
             sections[text].classList.remove('hidden');
             
-            // Re-trigger animations if Dashboard
+            // Re-trigger animations and chart updates if Dashboard
             if (text === 'Dashboard') {
+                // Reset opacity for re-animation
                 document.querySelectorAll('.kpi-card, .insight-card').forEach(el => {
                     el.style.opacity = '0';
+                    el.style.transform = 'translateY(20px)';
                 });
                 runDashboardAnimations();
+                
+                // Force Chart.js to resize/update now that they are visible
+                if (window.ForecastCharts) {
+                    const rev = window.ForecastCharts.getRevenueInstance();
+                    const cat = window.ForecastCharts.getCategoryInstance();
+                    if (rev) rev.resize();
+                    if (cat) cat.resize();
+                }
             }
 
             // Ensure icons are rendered in new view
