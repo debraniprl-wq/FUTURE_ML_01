@@ -461,12 +461,11 @@ function setupSidebarRouting() {
         link.addEventListener('click', (e) => {
             e.preventDefault();
             
-            // More robust way to get section name
-            const linkText = link.querySelector('span')?.innerText || link.innerText;
-            const text = linkText.trim().replace(/\d+\s+ALERTS/, '').trim();
+            // Use data-view attribute for reliable routing
+            const text = link.getAttribute('data-view');
             
             // Only handle implemented views
-            if (!sections[text]) return;
+            if (!text || !sections[text]) return;
             
             // Update active states
             links.forEach(l => l.classList.remove('active'));
