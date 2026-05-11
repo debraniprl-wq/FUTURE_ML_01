@@ -293,13 +293,36 @@ elif choice == "Inventory Intelligence":
     st.title("Inventory Intelligence")
     st.markdown("<p style='color: #94a3b8;'>Predictive stock management and warehouse optimization.</p>", unsafe_allow_html=True)
     
-    inventory = pd.DataFrame({
-        "Product": ["UltraPod Pro", "SmartFrame 4K", "NeoWatch X", "GlowLamp Mini"],
-        "Stock Level": ["12 units (Low)", "840 units (Healthy)", "56 units (Warning)", "1,200 units (Healthy)"],
-        "Demand Status": ["High Spike Expected", "Steady Growth", "Declining", "Seasonal Peak"],
-        "Recommendation": ["Restock 500 immediately", "No action needed", "Run promotion", "Monitor closely"]
+    # Inventory Status Row
+    s_col1, s_col2, s_col3 = st.columns(3)
+    s_col1.metric("Low Stock Alerts", "12", delta="-4", delta_color="inverse")
+    s_col2.metric("Optimal Stock", "84%", delta="+2%")
+    s_col3.metric("Stock Turnover", "5.2x", delta="+0.4x")
+    
+    st.markdown("### Warehouse Stock Levels")
+    inventory_df = pd.DataFrame({
+        "Product": ["UltraPod Pro", "SmartFrame 4K", "NeoWatch X", "GlowLamp Mini", "FlexTab 10", "VisionCore"],
+        "Quantity": [12, 840, 56, 1200, 45, 120],
+        "Threshold": [50, 200, 100, 300, 50, 150],
+        "Demand": ["High", "Steady", "Low", "Seasonal", "High", "Steady"]
     })
-    st.table(inventory)
+    
+    # Color coding logic for Stock Status
+    inventory_df["Status"] = inventory_df.apply(lambda x: "Critical" if x["Quantity"] < x["Threshold"]*0.5 else ("Warning" if x["Quantity"] < x["Threshold"] else "Healthy"), axis=1)
+    
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.dataframe(inventory_df, use_container_width=True)
+    with c2:
+        fig_inv = go.Figure(data=[
+            go.Bar(name='Current', x=inventory_df["Product"], y=inventory_df["Quantity"], marker_color='#4F46E5'),
+            go.Bar(name='Threshold', x=inventory_df["Product"], y=inventory_df["Threshold"], marker_color='rgba(255,255,255,0.2)')
+        ])
+        fig_inv.update_layout(barmode='group', template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=20, b=0), height=300)
+        st.plotly_chart(fig_inv, use_container_width=True)
+    
+    st.markdown("### Restock Recommendations")
+    st.info("Based on your sales velocity, we recommend restocking **UltraPod Pro** (500 units) and **FlexTab 10** (200 units) by Friday to avoid stockouts.")
 
 # --- Settings View ---
 elif choice == "Settings":
